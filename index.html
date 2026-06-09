@@ -547,8 +547,8 @@ function buildRow() {
     row.push(p ? p.tour : '', p ? p.pneusRestants : '');
   }
   row.push(d.etatFinalPneus || '');
-  // 3 stints: pneu, temp, hum, meteo
-  for (let i = 0; i < 3; i++) {
+  // 4 stints: pneu, temp, hum, meteo
+  for (let i = 0; i < 4; i++) {
     const s = d.stints[i];
     row.push(s ? s.pneu : '', s ? s.avgTemp : '', s ? s.avgHum : '', s ? s.meteo : '');
   }
@@ -597,7 +597,7 @@ function downloadCSV() {
   if (!row) { alert('Sélectionne un circuit et importe une analyse d\'abord.'); return; }
   const headers = ['Timestamp','DRAPEAU','PAYS','CIRCUIT','Longueur tour','Force appui','Dépassement','Rigidité susp.','Conso carburant','Usure pneus','Grip',
     'Arrêt1 tour','Arrêt1 pneus%','Arrêt2 tour','Arrêt2 pneus%','Arrêt3 tour','Arrêt3 pneus%','Arrêt4 tour','Arrêt4 pneus%','Pneus fin%',
-    'R1 pneu','R1 temp','R1 hum','R1 météo','R2 pneu','R2 temp','R2 hum','R2 météo','R3 pneu','R3 temp','R3 hum','R3 météo'];
+    'R1 pneu','R1 temp','R1 hum','R1 météo','R2 pneu','R2 temp','R2 hum','R2 météo','R3 pneu','R3 temp','R3 hum','R3 météo','R4 pneu','R4 temp','R4 hum','R4 météo'];
   const csv = [headers, row].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
@@ -664,7 +664,11 @@ function doPost(e) {
 // AC : Relais 3 – Pneu
 // AD : Relais 3 – Temp. moy.
 // AE : Relais 3 – Humidité moy.
-// AF : Relais 3 – Météo`;
+// AF : Relais 3 – Météo
+// AG : Relais 4 – Pneu
+// AH : Relais 4 – Temp. moy.
+// AI : Relais 4 – Humidité moy.
+// AJ : Relais 4 – Météo`;
 }
 
 function switchTab(name) {
