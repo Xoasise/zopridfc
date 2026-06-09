@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analyse Dégradation Pneu</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --card: #21253a;
+    --border: #2e3350;
+    --accent: #e8384f;
+    --accent2: #f5a623;
+    --text: #e8eaf0;
+    --muted: #7880a0;
+    --green: #29d398;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  header {
+    max-width: 960px;
+    margin: 0 auto 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .logo {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -.3px; }
+  header p { font-size: .82rem; color: var(--muted); margin-top: 2px; }
+
+  .main { max-width: 960px; margin: 0 auto; }
+
+  /* Step cards */
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 16px;
+  }
+  .step-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .step-num {
+    background: var(--accent);
+    color: #fff;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 700; flex-shrink: 0;
+  }
+  .step-num.done { background: var(--green); }
+  .step-header h2 { font-size: 1rem; font-weight: 600; }
+
+  /* Circuit selector */
+  .search-wrap { position: relative; }
+  .search-wrap input {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px 10px 38px;
+    color: var(--text);
+    font-size: .9rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap .icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 16px; pointer-events: none;
+  }
+  .dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 220px; overflow-y: auto;
+    z-index: 100;
+    display: none;
+  }
+  .dropdown.open { display: block; }
+  .dropdown-item {
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: .88rem;
+    display: flex; align-items: center; gap: 10px;
+    transition: background .15s;
+  }
+  .dropdown-item:hover { background: var(--border); }
+  .dropdown-item .flag { font-size: 1.1rem; }
+  .dropdown-item .pays { color: var(--muted); font-size: .78rem; }
+
+  /* Circuit info grid */
+  .circuit-info {
+    display: none;
+    margin-top: 18px;
+    background: var(--card);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .circuit-info.visible { display: block; }
+  .circuit-name-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .circuit-name-row .flag { font-size: 1.8rem; }
+  .circuit-name-row h3 { font-size: 1.1rem; font-weight: 700; }
+  .circuit-name-row .pays { color: var(--muted); font-size: .85rem; }
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .info-cell {
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .info-cell .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+  .info-cell .val { font-size: .92rem; font-weight: 600; }
+
+  /* File upload */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: var(--card);
+  }
+  .upload-zone:hover { border-color: var(--accent); background: var(--surface); }
+  .upload-zone.dragging { border-color: var(--accent); background: rgba(232,56,79,.06); }
+  .upload-zone .up-icon { font-size: 2rem; margin-bottom: 10px; }
+  .upload-zone p { color: var(--muted); font-size: .88rem; }
+  .upload-zone p strong { color: var(--text); }
+  #fileInput { display: none; }
+
+  /* Extracted data */
+  #preview {
+    display: none;
+    margin-top: 20px;
+  }
+  #preview.visible { display: block; }
+
+  .preview-title {
+    font-size: .85rem; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .7px;
+    margin-bottom: 12px;
+  }
+
+  .data-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .data-cell {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+  }
+  .data-cell .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+  .data-cell .val { font-size: .95rem; font-weight: 600; }
+
+  /* Pit stops table */
+  .pit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .85rem;
+    background: var(--card);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .pit-table th {
+    background: var(--surface);
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: .72rem;
+    letter-spacing: .5px;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .pit-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(46,51,80,.5);
+  }
+  .pit-table tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .75rem;
+    font-weight: 600;
+  }
+  .badge-red { background: rgba(232,56,79,.15); color: var(--accent); }
+  .badge-green { background: rgba(41,211,152,.15); color: var(--green); }
+  .badge-orange { background: rgba(245,166,35,.15); color: var(--accent2); }
+
+  /* Relais météo */
+  .relais-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .relais-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .relais-card h4 {
+    font-size: .8rem;
+    color: var(--accent2);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+  .relais-card .relais-row {
+    display: flex; justify-content: space-between;
+    font-size: .85rem;
+    padding: 3px 0;
+    color: var(--muted);
+  }
+  .relais-card .relais-row span:last-child { color: var(--text); font-weight: 600; }
+
+  /* Export */
+  .export-area {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .export-area p { font-size: .85rem; color: var(--muted); margin-bottom: 14px; }
+  .export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  button {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: .88rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity .2s, transform .1s;
+  }
+  button:hover { opacity: .88; transform: translateY(-1px); }
+  button:active { transform: translateY(0); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--card); border: 1px solid var(--border); color: var(--text); }
+  .btn-green { background: var(--green); color: #0f1117; }
+
+  #copyStatus {
+    font-size: .82rem;
+    color: var(--green);
+    margin-top: 10px;
+    display: none;
+  }
+
+  /* Script tab */
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+  .tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: .82rem;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: .78rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    color: #c9d1e6;
+  }
+
+  .chip {
+    display: inline-block;
+    background: rgba(232,56,79,.12);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: .75rem;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏎️</div>
+  <div>
+    <h1>Analyse Dégradation Pneu</h1>
+    <p>Extracteur de données de course → Google Sheets</p>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- STEP 1: Circuit -->
+  <div class="step" id="step1">
+    <div class="step-header">
+      <div class="step-num" id="num1">1</div>
+      <h2>Sélectionner le circuit</h2>
+    </div>
+    <div class="search-wrap">
+      <span class="icon">🔍</span>
+      <input type="text" id="circuitSearch" placeholder="Rechercher un circuit..." autocomplete="off">
+      <div class="dropdown" id="circuitDropdown"></div>
+    </div>
+    <div class="circuit-info" id="circuitInfo"></div>
+  </div>
+
+  <!-- STEP 2: Import -->
+  <div class="step" id="step2">
+    <div class="step-header">
+      <div class="step-num" id="num2">2</div>
+      <h2>Importer l'analyse de course (.xls)</h2>
+    </div>
+    <div class="upload-zone" id="uploadZone">
+      <div class="up-icon">📂</div>
+      <p><strong>Cliquer pour choisir</strong> ou glisser-déposer le fichier .xls</p>
+      <p style="margin-top:6px;font-size:.78rem;">Format exporté depuis le simulateur</p>
+      <input type="file" id="fileInput" accept=".xls,.html,.htm">
+    </div>
+    <div id="preview">
+      <div class="preview-title">📊 Données extraites</div>
+      <div id="extractedData"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Export -->
+  <div class="step" id="step3">
+    <div class="step-header">
+      <div class="step-num" id="num3">3</div>
+      <h2>Exporter vers Google Sheets</h2>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('tsv')">Copier les données</button>
+      <button class="tab" onclick="switchTab('script')">Script Apps Script</button>
+    </div>
+
+    <div class="tab-content active" id="tab-tsv">
+      <div class="export-area">
+        <p>Copie les données formatées pour les coller directement dans Google Sheets (Ctrl+V dans la cellule A2).</p>
+        <div class="export-row">
+          <button class="btn-primary" onclick="copyToClipboard()">📋 Copier les données</button>
+          <button class="btn-secondary" onclick="downloadCSV()">⬇️ Télécharger CSV</button>
+        </div>
+        <div id="copyStatus">✅ Données copiées ! Colle dans Google Sheets avec Ctrl+V</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-script">
+      <div class="export-area">
+        <p>Ce script Google Apps Script envoie automatiquement les données dans ton Google Sheets. À coller dans <strong>Extensions → Apps Script</strong>.</p>
+        <button class="btn-secondary" onclick="copyScript()" style="margin-bottom:14px;">📋 Copier le script</button>
+        <pre id="appsScript"></pre>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===================== TRACKS DATA =====================
+const TRACKS = [{"DRAPEAU":"🇦🇹","PAYS":"AUTRICHE","NOM DU CIRCUIT":"A1-Ring","Longueur de la course":"307.1km","Tours":71,"Longueur du tour":"4.325 km","Vitesse moyenne":"234.83 km/h","PIT":"21s","Puissance":13,"Maniabilité":8,"Accélération":9,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇦🇺","PAYS":"AUSTRALIE","NOM DU CIRCUIT":"ADELAIDE","Longueur de la course":"298.6km","Tours":79,"Longueur du tour":"3.78 km","Vitesse moyenne":"197.48 km/h","PIT":"19.5s","Puissance":8,"Maniabilité":9,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇫🇮","PAYS":"Finlande","NOM DU CIRCUIT":"Ahvenisto","Longueur de la course":"243.2km","Tours":80,"Longueur du tour":"3.04 km","Vitesse moyenne":"152.75 km/h","PIT":"11.5s","Puissance":5,"Maniabilité":10,"Accélération":7,"Force d'appui":"Haut","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇸🇪","PAYS":"Suède","NOM DU CIRCUIT":"Anderstorp","Longueur de la course":"281.8km","Tours":70,"Longueur du tour":"4.026 km","Vitesse moyenne":"210.42 km/h","PIT":"13.5s","Puissance":9,"Maniabilité":11,"Accélération":9,"Force d'appui":"Bas","Dépassement":"Très difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Austin","Longueur de la course":"308.9km","Tours":56,"Longueur du tour":"5.516 km","Vitesse moyenne":"197.46 km/h","PIT":"17.5s","Puissance":11,"Maniabilité":18,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Dur","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇩🇪","PAYS":"Allemagne","NOM DU CIRCUIT":"Avus","Longueur de la course":"312.3km","Tours":64,"Longueur du tour":"4.88 km","Vitesse moyenne":"321.47 km/h","PIT":"13s","Puissance":22,"Maniabilité":3,"Accélération":9,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Dur","Consommation de carburant":"Très haute","Usure des pneus":"Basse","Niveau de grip":"Normal"},{"DRAPEAU":"🇦🇿","PAYS":"Azerbaïdjan","NOM DU CIRCUIT":"Baku City","Longueur de la course":"306.3km","Tours":51,"Longueur du tour":"6.006 km","Vitesse moyenne":"216.67 km/h","PIT":"17s","Puissance":18,"Maniabilité":8,"Accélération":16,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Dur","Consommation de carburant":"Haute","Usure des pneus":"Très haute","Niveau de grip":"Elevé"},{"DRAPEAU":"🇪🇸","PAYS":"Espagne","NOM DU CIRCUIT":"Barcelona","Longueur de la course":"307.3km","Tours":65,"Longueur du tour":"4.728 km","Vitesse moyenne":"224.1 km/h","PIT":"21s","Puissance":11,"Maniabilité":13,"Accélération":8,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇬🇧","PAYS":"Royaume-Uni","NOM DU CIRCUIT":"Brands Hatch","Longueur de la course":"315.5km","Tours":75,"Longueur du tour":"4.207 km","Vitesse moyenne":"217.27 km/h","PIT":"25.5s","Puissance":10,"Maniabilité":12,"Accélération":8,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Basse","Niveau de grip":"Normal"},{"DRAPEAU":"🇧🇷","PAYS":"Brésil","NOM DU CIRCUIT":"Brasilia","Longueur de la course":"301.1km","Tours":55,"Longueur du tour":"5.475 km","Vitesse moyenne":"210.98 km/h","PIT":"13.5s","Puissance":16,"Maniabilité":15,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Dur","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇨🇭","PAYS":"Suisse","NOM DU CIRCUIT":"Bremgarten","Longueur de la course":"305.8km","Tours":42,"Longueur du tour":"7.281 km","Vitesse moyenne":"272.82 km/h","PIT":"17s","Puissance":8,"Maniabilité":26,"Accélération":17,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇨🇿","PAYS":"République tchèque","NOM DU CIRCUIT":"Brno","Longueur de la course":"308km","Tours":57,"Longueur du tour":"5.404 km","Vitesse moyenne":"211.92 km/h","PIT":"14s","Puissance":12,"Maniabilité":12,"Accélération":14,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇷🇴","PAYS":"Roumanie","NOM DU CIRCUIT":"Bucharest Ring","Longueur de la course":"245.7km","Tours":80,"Longueur du tour":"3.071 km","Vitesse moyenne":"150.5 km/h","PIT":"24s","Puissance":8,"Maniabilité":6,"Accélération":8,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Dur","Consommation de carburant":"Très haute","Usure des pneus":"Basse","Niveau de grip":"Normal"},{"DRAPEAU":"🇦🇷","PAYS":"Argentine","NOM DU CIRCUIT":"Buenos Aires","Longueur de la course":"306.6km","Tours":72,"Longueur du tour":"4.258 km","Vitesse moyenne":"189.63 km/h","PIT":"19.5s","Puissance":12,"Maniabilité":11,"Accélération":9,"Force d'appui":"Haut","Dépassement":"Très difficile","Rigidité de suspension":"Dur","Consommation de carburant":"Très basse","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇵🇹","PAYS":"Portugal","NOM DU CIRCUIT":"Estoril","Longueur de la course":"305.2km","Tours":70,"Longueur du tour":"4.36 km","Vitesse moyenne":"228.85 km/h","PIT":"22.5s","Puissance":11,"Maniabilité":8,"Accélération":14,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇮🇹","PAYS":"Italie","NOM DU CIRCUIT":"Fiorano","Longueur de la course":"238.6km","Tours":79,"Longueur du tour":"3.02 km","Vitesse moyenne":"188.93 km/h","PIT":"16.5s","Puissance":8,"Maniabilité":6,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Dur","Consommation de carburant":"Très haute","Usure des pneus":"Haute","Niveau de grip":"Bas"},{"DRAPEAU":"🇯🇵","PAYS":"Japon","NOM DU CIRCUIT":"Fuji","Longueur de la course":"305.4km","Tours":67,"Longueur du tour":"4.558 km","Vitesse moyenne":"199.75 km/h","PIT":"18.5s","Puissance":13,"Maniabilité":11,"Accélération":8,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇭🇷","PAYS":"Croatie","NOM DU CIRCUIT":"Grobnik","Longueur de la course":"308.4km","Tours":74,"Longueur du tour":"4.168 km","Vitesse moyenne":"224.81 km/h","PIT":"13s","Puissance":8,"Maniabilité":15,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Très haute","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇩🇪","PAYS":"Allemagne","NOM DU CIRCUIT":"Hockenheim","Longueur de la course":"306.4km","Tours":67,"Longueur du tour":"4.573 km","Vitesse moyenne":"246.04 km/h","PIT":"16.5s","Puissance":12,"Maniabilité":9,"Accélération":11,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇭🇺","PAYS":"Hongrie","NOM DU CIRCUIT":"Hungaroring","Longueur de la course":"305.5km","Tours":77,"Longueur du tour":"3.968 km","Vitesse moyenne":"194.35 km/h","PIT":"16.5s","Puissance":7,"Maniabilité":10,"Accélération":13,"Force d'appui":"Haut","Dépassement":"Très difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Très basse","Usure des pneus":"Très basse","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇸🇲","PAYS":"Imola","NOM DU CIRCUIT":"Saint-Marin","Longueur de la course":"305.6km","Tours":62,"Longueur du tour":"4.929 km","Vitesse moyenne":"221.81 km/h","PIT":"12s","Puissance":12,"Maniabilité":13,"Accélération":9,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Indianapolis","Longueur de la course":"306.6km","Tours":73,"Longueur du tour":"4.2 km","Vitesse moyenne":"214.98 km/h","PIT":"25.5s","Puissance":10,"Maniabilité":9,"Accélération":11,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Indianapolis Oval","Longueur de la course":"804.4km","Tours":200,"Longueur du tour":"4.022 km","Vitesse moyenne":"471.65 km/h","PIT":"45s","Puissance":17,"Maniabilité":9,"Accélération":2,"Force d'appui":"Bas","Dépassement":"Très facile","Rigidité de suspension":"Souple","Consommation de carburant":"Très haute","Usure des pneus":"Basse","Niveau de grip":"Bas"},{"DRAPEAU":"🇧🇷","PAYS":"Brésil","NOM DU CIRCUIT":"Interlagos","Longueur de la course":"305.9km","Tours":71,"Longueur du tour":"4.308 km","Vitesse moyenne":"221.51 km/h","PIT":"18s","Puissance":12,"Maniabilité":9,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇮🇳","PAYS":"Inde","NOM DU CIRCUIT":"Irungattukottai","Longueur de la course":"293.6km","Tours":79,"Longueur du tour":"3.716 km","Vitesse moyenne":"174.74 km/h","PIT":"14s","Puissance":8,"Maniabilité":12,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Elevé"},{"DRAPEAU":"🇹🇷","PAYS":"Turquie","NOM DU CIRCUIT":"Istanbul","Longueur de la course":"309.4km","Tours":58,"Longueur du tour":"5.334 km","Vitesse moyenne":"233.62 km/h","PIT":"16s","Puissance":13,"Maniabilité":10,"Accélération":14,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇸🇦","PAYS":"Arabie Saoudite","NOM DU CIRCUIT":"Jeddah","Longueur de la course":"308.7km","Tours":50,"Longueur du tour":"6.174 km","Vitesse moyenne":"245.6 km/h","PIT":"21s","Puissance":20,"Maniabilité":12,"Accélération":11,"Force d'appui":"Bas","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Très haute","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇪🇸","PAYS":"Espagne","NOM DU CIRCUIT":"Jerez","Longueur de la course":"306.4km","Tours":69,"Longueur du tour":"4.441 km","Vitesse moyenne":"208.79 km/h","PIT":"18s","Puissance":8,"Maniabilité":16,"Accélération":8,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Haute","Usure des pneus":"Très haute","Niveau de grip":"Bas"},{"DRAPEAU":"🇩🇰","PAYS":"Danemark","NOM DU CIRCUIT":"Jyllands-Ringen","Longueur de la course":"312.8km","Tours":136,"Longueur du tour":"2.3 km","Vitesse moyenne":"157.76 km/h","PIT":"19.5s","Puissance":5,"Maniabilité":9,"Accélération":4,"Force d'appui":"Haut","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇱🇹","PAYS":"Lituanie","NOM DU CIRCUIT":"Kaunas","Longueur de la course":"264.1km","Tours":80,"Longueur du tour":"3.301 km","Vitesse moyenne":"190.52 km/h","PIT":"11s","Puissance":9,"Maniabilité":10,"Accélération":5,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Bas"},{"DRAPEAU":"🇿🇦","PAYS":"Afrique du Sud","NOM DU CIRCUIT":"Kyalami","Longueur de la course":"306.8km","Tours":72,"Longueur du tour":"4.261 km","Vitesse moyenne":"240.76 km/h","PIT":"15s","Puissance":9,"Maniabilité":12,"Accélération":9,"Force d'appui":"Haut","Dépassement":"Difficile","Rigidité de suspension":"Dur","Consommation de carburant":"Très basse","Usure des pneus":"Moyenne","Niveau de grip":"Très bas"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Laguna Seca","Longueur de la course":"284.5km","Tours":79,"Longueur du tour":"3.601 km","Vitesse moyenne":"185.46 km/h","PIT":"16.7s","Puissance":11,"Maniabilité":8,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Souple","Consommation de carburant":"Très haute","Usure des pneus":"Haute","Niveau de grip":"Très bas"},{"DRAPEAU":"🇫🇷","PAYS":"France","NOM DU CIRCUIT":"Magny Cours","Longueur de la course":"305.8km","Tours":72,"Longueur du tour":"4.247 km","Vitesse moyenne":"213.14 km/h","PIT":"18s","Puissance":12,"Maniabilité":8,"Accélération":11,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇦🇺","PAYS":"Australie","NOM DU CIRCUIT":"Melbourne","Longueur de la course":"307.6km","Tours":58,"Longueur du tour":"5.303 km","Vitesse moyenne":"226.07 km/h","PIT":"16.5s","Puissance":12,"Maniabilité":15,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇲🇽","PAYS":"Mexique","NOM DU CIRCUIT":"Mexico City","Longueur de la course":"305km","Tours":69,"Longueur du tour":"4.42 km","Vitesse moyenne":"231.36 km/h","PIT":"24s","Puissance":13,"Maniabilité":12,"Accélération":7,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇲🇨","PAYS":"Monaco","NOM DU CIRCUIT":"Monte Carlo","Longueur de la course":"262.8km","Tours":78,"Longueur du tour":"3.369 km","Vitesse moyenne":"159.31 km/h","PIT":"18s","Puissance":7,"Maniabilité":7,"Accélération":12,"Force d'appui":"Haut","Dépassement":"Très difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇨🇦","PAYS":"Canada","NOM DU CIRCUIT":"Montreal","Longueur de la course":"305km","Tours":69,"Longueur du tour":"4.42 km","Vitesse moyenne":"215.72 km/h","PIT":"16.5s","Puissance":12,"Maniabilité":7,"Accélération":13,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Très bas"},{"DRAPEAU":"🇮🇹","PAYS":"Italie","NOM DU CIRCUIT":"Monza","Longueur de la course":"306.7km","Tours":53,"Longueur du tour":"5.787 km","Vitesse moyenne":"267.37 km/h","PIT":"25.5s","Puissance":17,"Maniabilité":12,"Accélération":9,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Très haute","Usure des pneus":"Moyenne","Niveau de grip":"Très bas"},{"DRAPEAU":"🇮🇹","PAYS":"Italie","NOM DU CIRCUIT":"Mugello","Longueur de la course":"304.3km","Tours":58,"Longueur du tour":"5.247 km","Vitesse moyenne":"251.72 km/h","PIT":"13.5s","Puissance":11,"Maniabilité":13,"Accélération":12,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇮🇳","PAYS":"Inde","NOM DU CIRCUIT":"New Delhi","Longueur de la course":"308.2km","Tours":60,"Longueur du tour":"5.137 km","Vitesse moyenne":"235.46 km/h","PIT":"19s","Puissance":11,"Maniabilité":15,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Très haute","Niveau de grip":"Très bas"},{"DRAPEAU":"🇩🇪","PAYS":"Allemagne","NOM DU CIRCUIT":"Nurburgring","Longueur de la course":"308.7km","Tours":60,"Longueur du tour":"5.145 km","Vitesse moyenne":"230.77 km/h","PIT":"15s","Puissance":12,"Maniabilité":12,"Accélération":13,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Très basse","Usure des pneus":"Basse","Niveau de grip":"Normal"},{"DRAPEAU":"🇦🇹","PAYS":"Autriche","NOM DU CIRCUIT":"Oesterreichring","Longueur de la course":"308.9km","Tours":52,"Longueur du tour":"5.94 km","Vitesse moyenne":"277.82 km/h","PIT":"21s","Puissance":19,"Maniabilité":14,"Accélération":9,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇫🇷","PAYS":"France","NOM DU CIRCUIT":"Paul Ricard","Longueur de la course":"305km","Tours":79,"Longueur du tour":"3.861 km","Vitesse moyenne":"234.12 km/h","PIT":"19.5s","Puissance":9,"Maniabilité":11,"Accélération":8,"Force d'appui":"Moyenne","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Très haute","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇵🇹","PAYS":"Portugal","NOM DU CIRCUIT":"Portimao","Longueur de la course":"309.7km","Tours":66,"Longueur du tour":"4.692 km","Vitesse moyenne":"207.9 km/h","PIT":"15.5s","Puissance":9,"Maniabilité":14,"Accélération":11,"Force d'appui":"Haut","Dépassement":"Facile","Rigidité de suspension":"Souple","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Bas"},{"DRAPEAU":"🇵🇱","PAYS":"Pologne","NOM DU CIRCUIT":"Poznan","Longueur de la course":"306.2km","Tours":75,"Longueur du tour":"4.083 km","Vitesse moyenne":"223.72 km/h","PIT":"14s","Puissance":7,"Maniabilité":14,"Accélération":8,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇦🇷","PAYS":"Argentine","NOM DU CIRCUIT":"Rafaela Oval","Longueur de la course":"317.3km","Tours":67,"Longueur du tour":"4.736 km","Vitesse moyenne":"341.7 km/h","PIT":"10s","Puissance":18,"Maniabilité":10,"Accélération":6,"Force d'appui":"Bas","Dépassement":"Très facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Très haute","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇧🇭","PAYS":"Bahreïn","NOM DU CIRCUIT":"Sakhir","Longueur de la course":"308.5km","Tours":57,"Longueur du tour":"5.412 km","Vitesse moyenne":"245.34 km/h","PIT":"25.5s","Puissance":16,"Maniabilité":11,"Accélération":9,"Force d'appui":"Bas","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Très haute","Usure des pneus":"Moyenne","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇲🇾","PAYS":"Malaisie","NOM DU CIRCUIT":"Sepang","Longueur de la course":"310.4km","Tours":55,"Longueur du tour":"5.644 km","Vitesse moyenne":"221.89 km/h","PIT":"24s","Puissance":14,"Maniabilité":11,"Accélération":14,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇬🇷","PAYS":"Grèce","NOM DU CIRCUIT":"Serres","Longueur de la course":"254.9km","Tours":80,"Longueur du tour":"3.186 km","Vitesse moyenne":"205.56 km/h","PIT":"12s","Puissance":5,"Maniabilité":10,"Accélération":9,"Force d'appui":"Haut","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇨🇳","PAYS":"Chine","NOM DU CIRCUIT":"Shanghai","Longueur de la course":"305.2km","Tours":56,"Longueur du tour":"5.45 km","Vitesse moyenne":"225.01 km/h","PIT":"24s","Puissance":9,"Maniabilité":16,"Accélération":15,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Souple","Consommation de carburant":"Très haute","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇬🇧","PAYS":"Royaume-Uni","NOM DU CIRCUIT":"Silverstone","Longueur de la course":"308.3km","Tours":60,"Longueur du tour":"5.138 km","Vitesse moyenne":"232.12 km/h","PIT":"22.5s","Puissance":11,"Maniabilité":11,"Accélération":16,"Force d'appui":"Bas","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Basse","Niveau de grip":"Normal"},{"DRAPEAU":"🇸🇬","PAYS":"Singapour","NOM DU CIRCUIT":"Singapore","Longueur de la course":"309.1km","Tours":61,"Longueur du tour":"5.067 km","Vitesse moyenne":"222.08 km/h","PIT":"17s","Puissance":7,"Maniabilité":11,"Accélération":17,"Force d'appui":"Haut","Dépassement":"Difficile","Rigidité de suspension":"Dur","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Bas"},{"DRAPEAU":"🇸🇰","PAYS":"Slovaquie","NOM DU CIRCUIT":"Slovakiaring","Longueur de la course":"313.9km","Tours":53,"Longueur du tour":"5.923 km","Vitesse moyenne":"228.97 km/h","PIT":"19.5s","Puissance":17,"Maniabilité":10,"Accélération":15,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Haute","Niveau de grip":"Elevé"},{"DRAPEAU":"🇷🇺","PAYS":"Russie","NOM DU CIRCUIT":"Sochi","Longueur de la course":"310.1km","Tours":53,"Longueur du tour":"5.851 km","Vitesse moyenne":"212.26 km/h","PIT":"23s","Puissance":8,"Maniabilité":15,"Accélération":18,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇧🇪","PAYS":"Belgique","NOM DU CIRCUIT":"Spa","Longueur de la course":"306.6km","Tours":44,"Longueur du tour":"6.968 km","Vitesse moyenne":"242.47 km/h","PIT":"13.5s","Puissance":18,"Maniabilité":16,"Accélération":13,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Normal"},{"DRAPEAU":"🇯🇵","PAYS":"Japon","NOM DU CIRCUIT":"Suzuka","Longueur de la course":"310.6km","Tours":53,"Longueur du tour":"5.86 km","Vitesse moyenne":"240.64 km/h","PIT":"15s","Puissance":11,"Maniabilité":18,"Accélération":13,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Très élevé"},{"DRAPEAU":"🇪🇸","PAYS":"Espagne","NOM DU CIRCUIT":"Valencia","Longueur de la course":"310.1km","Tours":57,"Longueur du tour":"5.44 km","Vitesse moyenne":"220.28 km/h","PIT":"14.5s","Puissance":11,"Maniabilité":12,"Accélération":16,"Force d'appui":"Haut","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇦🇪","PAYS":"Émirats arabes unis","NOM DU CIRCUIT":"Yas Marina","Longueur de la course":"305.5km","Tours":55,"Longueur du tour":"5.555 km","Vitesse moyenne":"221.24 km/h","PIT":"18.5s","Puissance":12,"Maniabilité":10,"Accélération":17,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇰🇷","PAYS":"Corée du Sud","NOM DU CIRCUIT":"Yeongam","Longueur de la course":"309.2km","Tours":55,"Longueur du tour":"5.622 km","Vitesse moyenne":"220.51 km/h","PIT":"23.5s","Puissance":11,"Maniabilité":15,"Accélération":13,"Force d'appui":"Haut","Dépassement":"Normal","Rigidité de suspension":"Moyenne","Consommation de carburant":"Moyenne","Usure des pneus":"Haute","Niveau de grip":"Normal"},{"DRAPEAU":"🇳🇱","PAYS":"Pays-Bas","NOM DU CIRCUIT":"Zandvoort","Longueur de la course":"301.8km","Tours":71,"Longueur du tour":"4.251 km","Vitesse moyenne":"239.92 km/h","PIT":"22.5s","Puissance":9,"Maniabilité":13,"Accélération":9,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Dur","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇧🇪","PAYS":"Belgique","NOM DU CIRCUIT":"Zolder","Longueur de la course":"298.3km","Tours":70,"Longueur du tour":"4.261 km","Vitesse moyenne":"229.64 km/h","PIT":"19.5s","Puissance":11,"Maniabilité":9,"Accélération":10,"Force d'appui":"Moyenne","Dépassement":"Difficile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Las Vegas","Longueur de la course":"305.9km","Tours":50,"Longueur du tour":"6.118 km","Vitesse moyenne":"241.06 km/h","PIT":"23s","Puissance":12,"Maniabilité":11,"Accélération":20,"Force d'appui":"Bas","Dépassement":"Facile","Rigidité de suspension":"Moyenne","Consommation de carburant":"Haute","Usure des pneus":"Moyenne","Niveau de grip":"Bas"},{"DRAPEAU":"🇶🇦","PAYS":"Qatar","NOM DU CIRCUIT":"Losail","Longueur de la course":"306.7km","Tours":57,"Longueur du tour":"5.381 km","Vitesse moyenne":"239.08 km/h","PIT":"24s","Puissance":13,"Maniabilité":16,"Accélération":9,"Force d'appui":"Haut","Dépassement":"Difficile","Rigidité de suspension":"Souple","Consommation de carburant":"Basse","Usure des pneus":"Moyenne","Niveau de grip":"Elevé"},{"DRAPEAU":"🇺🇸","PAYS":"États-Unis","NOM DU CIRCUIT":"Miami","Longueur de la course":"308.4km","Tours":57,"Longueur du tour":"5.411 km","Vitesse moyenne":"232.54 km/h","PIT":"17s","Puissance":14,"Maniabilité":13,"Accélération":11,"Force d'appui":"Moyenne","Dépassement":"Normal","Rigidité de suspension":"Dur","Consommation de carburant":"Basse","Usure des pneus":"Basse","Niveau de grip":"Elevé"}];
+
+// ===================== STATE =====================
+let selectedTrack = null;
+let extractedRaceData = null;
+
+// ===================== CIRCUIT SEARCH =====================
+const searchInput = document.getElementById('circuitSearch');
+const dropdown = document.getElementById('circuitDropdown');
+
+function renderDropdown(list) {
+  dropdown.innerHTML = list.map((t, i) =>
+    `<div class="dropdown-item" onclick="selectTrack(${TRACKS.indexOf(t)})">
+      <span class="flag">${t.DRAPEAU}</span>
+      <div>
+        <div>${t['NOM DU CIRCUIT']}</div>
+        <div class="pays">${t.PAYS}</div>
+      </div>
+    </div>`
+  ).join('');
+  dropdown.classList.toggle('open', list.length > 0);
+}
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.toLowerCase().trim();
+  if (!q) { dropdown.classList.remove('open'); return; }
+  const filtered = TRACKS.filter(t =>
+    t['NOM DU CIRCUIT'].toLowerCase().includes(q) ||
+    t.PAYS.toLowerCase().includes(q)
+  );
+  renderDropdown(filtered);
+});
+
+searchInput.addEventListener('focus', () => {
+  if (!searchInput.value) renderDropdown(TRACKS);
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) dropdown.classList.remove('open');
+});
+
+function selectTrack(idx) {
+  selectedTrack = TRACKS[idx];
+  searchInput.value = selectedTrack['NOM DU CIRCUIT'];
+  dropdown.classList.remove('open');
+  renderCircuitInfo();
+  document.getElementById('num1').classList.add('done');
+  document.getElementById('num1').textContent = '✓';
+}
+
+function renderCircuitInfo() {
+  const t = selectedTrack;
+  const info = document.getElementById('circuitInfo');
+  info.innerHTML = `
+    <div class="circuit-name-row">
+      <span class="flag">${t.DRAPEAU}</span>
+      <div>
+        <h3>${t['NOM DU CIRCUIT']}</h3>
+        <div class="pays">${t.PAYS} · ${t['Longueur de la course']} · ${t.Tours} tours</div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-cell"><div class="label">Longueur tour</div><div class="val">${t['Longueur du tour']}</div></div>
+      <div class="info-cell"><div class="label">Force d'appui</div><div class="val">${t["Force d'appui"]}</div></div>
+      <div class="info-cell"><div class="label">Dépassement</div><div class="val">${t['Dépassement']}</div></div>
+      <div class="info-cell"><div class="label">Rigidité suspension</div><div class="val">${t['Rigidité de suspension']}</div></div>
+      <div class="info-cell"><div class="label">Consommation</div><div class="val">${t['Consommation de carburant']}</div></div>
+      <div class="info-cell"><div class="label">Usure pneus</div><div class="val">${t['Usure des pneus']}</div></div>
+      <div class="info-cell"><div class="label">Niveau de grip</div><div class="val">${t['Niveau de grip']}</div></div>
+    </div>
+  `;
+  info.classList.add('visible');
+  updateExportScript();
+}
+
+// ===================== FILE PARSE =====================
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragging'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragging'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragging');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) processFile(fileInput.files[0]); });
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const html = e.target.result;
+    const data = parseRaceHTML(html);
+    extractedRaceData = data;
+    renderPreview(data);
+    document.getElementById('num2').classList.add('done');
+    document.getElementById('num2').textContent = '✓';
+    updateExportScript();
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseRaceHTML(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const tables = doc.querySelectorAll('table');
+
+  let rows = [];
+  // Collect all rows from all tables
+  tables.forEach(table => {
+    table.querySelectorAll('tr').forEach(tr => {
+      const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
+      if (cells.length > 0) rows.push(cells);
+    });
+  });
+
+  // Find lap data rows (row with Tour/Chrono header)
+  let lapStart = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][0] === 'Tour' && rows[i][1] === 'Chrono') { lapStart = i + 1; break; }
+  }
+
+  const laps = [];
+  for (let i = lapStart; i < rows.length; i++) {
+    const r = rows[i];
+    const tourNum = parseInt(r[0]);
+    if (isNaN(tourNum)) break;
+    laps.push({
+      tour: tourNum,
+      chrono: r[1],
+      pos: r[2],
+      pneus: r[3],
+      meteo: r[4],
+      temp: parseFloat(r[5]) || 0,
+      hum: parseFloat(r[6]) || 0,
+      event: r[7]
+    });
+  }
+
+  // Pit stops section
+  const pits = [];
+  let pitStart = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][0] === 'Stands' && rows[i][1] && rows[i][1].includes('Raison')) { pitStart = i + 1; break; }
+  }
+  if (pitStart >= 0) {
+    for (let i = pitStart; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r[0] || !r[0].includes('Arrêt')) break;
+      const tourMatch = r[0].match(/Tour\s+(\d+)/i);
+      pits.push({
+        label: r[0],
+        tour: tourMatch ? parseInt(tourMatch[1]) : null,
+        raison: r[1],
+        pneusRestants: r[2],
+        carburantRestant: r[3],
+        carburantApres: r[4],
+        tempsArret: r[5]
+      });
+    }
+  }
+
+  // Final tire state
+  let etatFinalPneus = '';
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][0] && rows[i][0].includes('Etat des pneus à la fin')) {
+      etatFinalPneus = rows[i][1] || '';
+      break;
+    }
+  }
+
+  // Compute relais averages between pit stops
+  const pitTours = pits.map(p => p.tour).filter(t => t !== null);
+  const stints = [];
+  let prev = 0;
+  [...pitTours, laps.length > 0 ? laps[laps.length - 1].tour : 0].forEach((endTour, idx) => {
+    const stintLaps = laps.filter(l => l.tour > prev && l.tour <= endTour);
+    const avgTemp = stintLaps.length ? (stintLaps.reduce((s, l) => s + l.temp, 0) / stintLaps.length).toFixed(1) : '-';
+    const avgHum = stintLaps.length ? (stintLaps.reduce((s, l) => s + l.hum, 0) / stintLaps.length).toFixed(1) : '-';
+    const meteos = stintLaps.map(l => l.meteo).filter(Boolean);
+    const meteoMode = meteos.length ? mode(meteos) : '-';
+    stints.push({ idx: idx + 1, tours: `${prev + 1}–${endTour}`, avgTemp, avgHum, meteo: meteoMode });
+    prev = endTour;
+  });
+
+  return { laps, pits, stints, etatFinalPneus };
+}
+
+function mode(arr) {
+  const freq = {};
+  arr.forEach(v => freq[v] = (freq[v] || 0) + 1);
+  return Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+function renderPreview(data) {
+  const preview = document.getElementById('preview');
+  const container = document.getElementById('extractedData');
+
+  // Pit stops table
+  const pitHTML = data.pits.length > 0 ? `
+    <div class="preview-title" style="margin-top:16px;">🏁 Arrêts aux stands</div>
+    <table class="pit-table">
+      <thead><tr><th>Arrêt</th><th>Tour</th><th>Raison</th><th>Pneus restants</th><th>Carburant restant</th><th>Temps arrêt</th></tr></thead>
+      <tbody>
+        ${data.pits.map(p => `
+          <tr>
+            <td>${p.label.split('(')[0].trim()}</td>
+            <td><span class="badge badge-orange">Tour ${p.tour}</span></td>
+            <td style="color:var(--muted);font-size:.82rem;">${p.raison}</td>
+            <td><span class="badge badge-red">${p.pneusRestants}%</span></td>
+            <td>${p.carburantRestant}</td>
+            <td>${p.tempsArret}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="data-grid">
+      <div class="data-cell"><div class="label">Pneus à l'arrivée</div><div class="val"><span class="badge badge-green">${data.etatFinalPneus}%</span></div></div>
+    </div>
+  ` : '';
+
+  // Relais meteo
+  const relaisHTML = data.stints.length > 0 ? `
+    <div class="preview-title" style="margin-top:16px;">🌤️ Conditions par relais</div>
+    <div class="relais-grid">
+      ${data.stints.map(s => `
+        <div class="relais-card">
+          <h4>Relais ${s.idx} <span style="font-weight:400;color:var(--muted);font-size:.75rem;">(Tours ${s.tours})</span></h4>
+          <div class="relais-row"><span>Météo</span><span>${s.meteo}</span></div>
+          <div class="relais-row"><span>Temp. moy.</span><span>${s.avgTemp}°</span></div>
+          <div class="relais-row"><span>Humidité moy.</span><span>${s.avgHum}%</span></div>
+        </div>`).join('')}
+    </div>
+  ` : '';
+
+  container.innerHTML = pitHTML + relaisHTML;
+  preview.classList.add('visible');
+}
+
+// ===================== EXPORT =====================
+function buildRow() {
+  if (!selectedTrack || !extractedRaceData) return null;
+  const t = selectedTrack;
+  const d = extractedRaceData;
+  const now = new Date().toLocaleString('fr-FR');
+
+  const row = [now, t.DRAPEAU, t.PAYS, t['NOM DU CIRCUIT'], t['Longueur du tour'],
+    t["Force d'appui"], t['Dépassement'], t['Rigidité de suspension'],
+    t['Consommation de carburant'], t['Usure des pneus'], t['Niveau de grip']];
+
+  // Up to 4 pit stops
+  for (let i = 0; i < 4; i++) {
+    const p = d.pits[i];
+    if (p) {
+      row.push(p.tour, p.pneusRestants);
+    } else {
+      row.push('', '');
+    }
+  }
+
+  row.push(d.etatFinalPneus || '');
+
+  // Up to 3 stints: temp, hum, meteo
+  for (let i = 0; i < 3; i++) {
+    const s = d.stints[i];
+    if (s) {
+      row.push(s.avgTemp, s.avgHum, s.meteo);
+    } else {
+      row.push('', '', '');
+    }
+  }
+
+  return row;
+}
+
+function copyToClipboard() {
+  const row = buildRow();
+  if (!row) { alert('Sélectionne un circuit et importe une analyse d\'abord.'); return; }
+  const tsv = row.join('\t');
+  navigator.clipboard.writeText(tsv).then(() => {
+    const st = document.getElementById('copyStatus');
+    st.style.display = 'block';
+    setTimeout(() => st.style.display = 'none', 3000);
+  });
+}
+
+function downloadCSV() {
+  const row = buildRow();
+  if (!row) { alert('Sélectionne un circuit et importe une analyse d\'abord.'); return; }
+  const headers = ['Timestamp','DRAPEAU','PAYS','CIRCUIT','Longueur tour','Force d\'appui','Dépassement','Rigidité suspension','Consommation carburant','Usure pneus','Niveau grip',
+    'Arrêt 1 (tour)','Arrêt 1 (pneus %)','Arrêt 2 (tour)','Arrêt 2 (pneus %)','Arrêt 3 (tour)','Arrêt 3 (pneus %)','Arrêt 4 (tour)','Arrêt 4 (pneus %)',
+    'Pneus fin (%)',
+    'Temp relais 1','Hum relais 1','Météo relais 1','Temp relais 2','Hum relais 2','Météo relais 2','Temp relais 3','Hum relais 3','Météo relais 3'];
+  const csv = [headers, row].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'analyse_pneu.csv'; a.click();
+}
+
+function updateExportScript() {
+  const sheetId = 'VOTRE_SPREADSHEET_ID';
+  const sheetName = 'Feuille 1';
+  const script = `// Script Google Apps Script
+// À coller dans Extensions → Apps Script de ton Google Sheets
+// Puis lancer via un bouton ou manuellement
+
+function ajouterDonneesCourse() {
+  const SHEET_ID = '${sheetId}';
+  const SHEET_NAME = '${sheetName}';
+  
+  // ↓ Colle ici les données copiées depuis l'outil (onglet "Copier les données")
+  // Exemple avec la dernière course :
+  const donnees = [
+    /* timestamp */ new Date().toLocaleString('fr-FR'),
+    /* drapeau  */ '${selectedTrack ? selectedTrack.DRAPEAU : 'BE'}',
+    /* pays     */ '${selectedTrack ? selectedTrack.PAYS : 'Belgique'}',
+    /* circuit  */ '${selectedTrack ? selectedTrack['NOM DU CIRCUIT'] : 'Zolder'}',
+    /* long tour*/ '${selectedTrack ? selectedTrack['Longueur du tour'] : '4.261 km'}',
+    /* force appui */ '${selectedTrack ? selectedTrack["Force d'appui"] : 'Moyenne'}',
+    /* depassement */ '${selectedTrack ? selectedTrack['Dépassement'] : 'Difficile'}',
+    /* rigidite  */ '${selectedTrack ? selectedTrack['Rigidité de suspension'] : 'Moyenne'}',
+    /* conso     */ '${selectedTrack ? selectedTrack['Consommation de carburant'] : 'Basse'}',
+    /* usure     */ '${selectedTrack ? selectedTrack['Usure des pneus'] : 'Moyenne'}',
+    /* grip      */ '${selectedTrack ? selectedTrack['Niveau de grip'] : 'Bas'}',
+    // Arrêts aux stands : [tour, % pneus restants] x4
+    ${extractedRaceData && extractedRaceData.pits[0] ? `${extractedRaceData.pits[0].tour}, ${extractedRaceData.pits[0].pneusRestants}` : "'', ''"},
+    ${extractedRaceData && extractedRaceData.pits[1] ? `${extractedRaceData.pits[1].tour}, ${extractedRaceData.pits[1].pneusRestants}` : "'', ''"},
+    ${extractedRaceData && extractedRaceData.pits[2] ? `${extractedRaceData.pits[2].tour}, ${extractedRaceData.pits[2].pneusRestants}` : "'', ''"},
+    ${extractedRaceData && extractedRaceData.pits[3] ? `${extractedRaceData.pits[3].tour}, ${extractedRaceData.pits[3].pneusRestants}` : "'', ''"},
+    // Pneus à la fin
+    ${extractedRaceData ? extractedRaceData.etatFinalPneus : ''},
+    // Relais (temp, hum, météo) x3
+    ${extractedRaceData && extractedRaceData.stints[0] ? `${extractedRaceData.stints[0].avgTemp}, ${extractedRaceData.stints[0].avgHum}, '${extractedRaceData.stints[0].meteo}'` : "'', '', ''"},
+    ${extractedRaceData && extractedRaceData.stints[1] ? `${extractedRaceData.stints[1].avgTemp}, ${extractedRaceData.stints[1].avgHum}, '${extractedRaceData.stints[1].meteo}'` : "'', '', ''"},
+    ${extractedRaceData && extractedRaceData.stints[2] ? `${extractedRaceData.stints[2].avgTemp}, ${extractedRaceData.stints[2].avgHum}, '${extractedRaceData.stints[2].meteo}'` : "'', '', ''"},
+  ];
+  
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  sheet.appendRow(donnees);
+  SpreadsheetApp.getUi().alert('✅ Données ajoutées avec succès !');
+}`;
+  document.getElementById('appsScript').textContent = script;
+}
+
+function copyScript() {
+  const text = document.getElementById('appsScript').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('Script copié !'));
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && name === 'tsv') || (i === 1 && name === 'script')));
+  document.getElementById('tab-tsv').classList.toggle('active', name === 'tsv');
+  document.getElementById('tab-script').classList.toggle('active', name === 'script');
+}
+
+// Init
+updateExportScript();
+</script>
+</body>
+</html>
