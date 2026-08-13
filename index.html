@@ -170,6 +170,16 @@
   .relais-card .relais-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 3px 0; color: var(--muted); }
   .relais-card .relais-row span:last-child { color: var(--text); font-weight: 600; }
 
+  .setup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .setup-cell { background: var(--card); border-radius: 8px; padding: 12px 14px; border: 1px solid var(--border); }
+  .setup-cell .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+  .setup-cell .val { font-size: .95rem; font-weight: 600; }
+
+  .wear-table { width: 100%; border-collapse: collapse; font-size: .82rem; background: var(--card); border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+  .wear-table th { background: var(--surface); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .68rem; letter-spacing: .4px; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  .wear-table td { padding: 8px 10px; border-bottom: 1px solid rgba(46,51,80,.5); }
+  .wear-table tr:last-child td { border-bottom: none; }
+
   /* Google Sheets connection */
   .gs-connect {
     background: var(--card);
@@ -454,6 +464,10 @@ function processFile(file) {
   reader.readAsText(file, 'utf-8');
 }
 
+// Composants de pièces, dans l'ordre attendu par PROTO_DB (Chassis, Moteur, Aileron Avant,
+// Aileron Arrière, Fond Plat, Pontons Latéraux, Refroidissement, B.V., Freins, Suspension, Electronique)
+const PIECES = ['Chassis','Moteur','Aileron Avant','Aileron Arrière','Fond Plat','Pontons Latéraux','Refroidissement','B.V.','Freins','Suspension','électronique'];
+
 function parseRaceHTML(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const rows = [];
@@ -475,7 +489,51 @@ function parseRaceHTML(html) {
     laps.push({ tour: tourNum, pneus: r[3], meteo: r[4], temp: parseFloat(r[5]) || 0, hum: parseFloat(r[6]) || 0, event: r[7] });
   }
 
-  // Pit stops
+  // Risques utilisés : Dépassement, Défense, Sec et dégagé, Mouillé, Disfonctionnement (+ "-")
+  let risques = { depassement: '', defense: '', secDegage: '', mouille: '', disfonctionnement: '' };
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i][0] === 'Dépassement' && rows[i][1] === 'Défense' && rows[i][2] === 'Sec et dégagé') {
+      const v = rows[i + 1];
+      risques = { depassement: v[0] || '', defense: v[1] || '', secDegage: v[2] || '', mouille: v[3] || '', disfonctionnement: v[4] || '' };
+      break;
+    }
+  }
+
+  // Énergie du pilote
+  let energiePilote = '';
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i][0] === 'Énergie du pilote') { energiePilote = rows[i + 1][0] || ''; break; }
+  }
+
+  // Réglage utilisé : Aileron avant, Aileron arrière, Moteur, Freins, B.V., Suspension
+  let reglage = { aileronAv: '', aileronAr: '', moteur: '', freins: '', bv: '', suspension: '' };
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i][0] === 'Aileron avant' && rows[i][1] === 'Aileron arrière') {
+      const v = rows[i + 1];
+      reglage = { aileronAv: v[0] || '', aileronAr: v[1] || '', moteur: v[2] || '', freins: v[3] || '', bv: v[4] || '', suspension: v[5] || '' };
+      break;
+    }
+  }
+
+  // Niveau des pièces / Usure au départ / Usure à l'arrivée
+  // Chaque ligne : [label, Chassis, Moteur, A.Av, A.Ar, F.P, P.L, Refr, B.V, Freins, Susp, Elec] = 12 cellules
+  let niveaux = null, usureDepart = null, usureArrivee = null;
+  for (const r of rows) {
+    if (!r[0]) continue;
+    if (r[0].includes('Niveau des pièces de la voiture')) niveaux = r.slice(1, 12);
+    else if (r[0].includes('Usure des pièces de la voiture (au départ)')) usureDepart = r.slice(1, 12);
+    else if (r[0].includes("Usure des pièces de la voiture (à l'arrivée)")) usureArrivee = r.slice(1, 12);
+  }
+
+  // Carburant au départ / à la fin
+  let carburantDepart = '', carburantFin = '';
+  for (const r of rows) {
+    if (!r[0]) continue;
+    if (r[0].startsWith('Carburant au départ (litres)')) carburantDepart = r[1] || '';
+    else if (r[0].startsWith('Carburant restant en fin de course (litres)')) carburantFin = r[1] || '';
+  }
+
+  // Pit stops (Stands / Raison / Etat pneus % / Carburant restant % / Carburant après arrêt litres / Temps arrêt)
   const pits = [];
   let pitStart = -1;
   for (let i = 0; i < rows.length; i++) {
@@ -486,7 +544,16 @@ function parseRaceHTML(html) {
       const r = rows[i];
       if (!r[0] || !r[0].includes('Arrêt')) break;
       const m = r[0].match(/Tour\s+(\d+)/i);
-      pits.push({ label: r[0].split('(')[0].trim(), tour: m ? parseInt(m[1]) : null, raison: r[1], pneusRestants: r[2], carburantRestant: r[3], tempsArret: r[5] });
+      const carbLitresMatch = (r[4] || '').match(/[\d.]+/);
+      pits.push({
+        label: r[0].split('(')[0].trim(),
+        tour: m ? parseInt(m[1]) : null,
+        raison: r[1],
+        pneusRestants: r[2],
+        carburantRestantPct: r[3],
+        carburantApresLitres: carbLitresMatch ? carbLitresMatch[0] : '',
+        tempsArret: r[5]
+      });
     }
   }
 
@@ -512,7 +579,7 @@ function parseRaceHTML(html) {
     prev = endTour;
   });
 
-  return { laps, pits, stints, etatFinalPneus };
+  return { laps, pits, stints, etatFinalPneus, risques, energiePilote, reglage, niveaux, usureDepart, usureArrivee, carburantDepart, carburantFin };
 }
 
 function mode(arr) {
@@ -525,20 +592,23 @@ function renderPreview(data) {
   const pitHTML = data.pits.length > 0 ? `
     <div class="preview-title" style="margin-top:16px;">🏁 Arrêts aux stands</div>
     <table class="pit-table">
-      <thead><tr><th>Arrêt</th><th>Tour</th><th>Raison</th><th>Pneus restants</th><th>Carburant restant</th><th>Temps arrêt</th></tr></thead>
+      <thead><tr><th>Arrêt</th><th>Tour</th><th>Raison</th><th>Pneus restants</th><th>Carburant restant</th><th>Carburant après (L)</th><th>Temps arrêt</th></tr></thead>
       <tbody>${data.pits.map(p => `
         <tr>
           <td>${p.label}</td>
           <td><span class="badge badge-orange">Tour ${p.tour}</span></td>
           <td style="color:var(--muted);font-size:.82rem;">${p.raison}</td>
           <td><span class="badge badge-red">${p.pneusRestants}%</span></td>
-          <td>${p.carburantRestant}</td>
+          <td>${p.carburantRestantPct}%</td>
+          <td>${p.carburantApresLitres} L</td>
           <td>${p.tempsArret}</td>
         </tr>`).join('')}
       </tbody>
     </table>
     <div class="data-grid">
       <div class="data-cell"><div class="label">Pneus à l'arrivée</div><div class="val"><span class="badge badge-green">${data.etatFinalPneus}%</span></div></div>
+      <div class="data-cell"><div class="label">Carburant départ</div><div class="val">${data.carburantDepart} L</div></div>
+      <div class="data-cell"><div class="label">Carburant fin</div><div class="val">${data.carburantFin} L</div></div>
     </div>` : '';
 
   const relaisHTML = data.stints.length > 0 ? `
@@ -553,7 +623,35 @@ function renderPreview(data) {
       </div>`).join('')}
     </div>` : '';
 
-  document.getElementById('extractedData').innerHTML = pitHTML + relaisHTML;
+  const setupHTML = `
+    <div class="preview-title" style="margin-top:16px;">⚙️ Risques, énergie & réglages</div>
+    <div class="setup-grid">
+      <div class="setup-cell"><div class="label">Dépassement (risque)</div><div class="val">${data.risques.depassement}</div></div>
+      <div class="setup-cell"><div class="label">Défense</div><div class="val">${data.risques.defense}</div></div>
+      <div class="setup-cell"><div class="label">Sec et dégagé</div><div class="val">${data.risques.secDegage}</div></div>
+      <div class="setup-cell"><div class="label">Mouillé</div><div class="val">${data.risques.mouille}</div></div>
+      <div class="setup-cell"><div class="label">Disfonctionnement</div><div class="val">${data.risques.disfonctionnement}</div></div>
+      <div class="setup-cell"><div class="label">Énergie du pilote</div><div class="val">${data.energiePilote}</div></div>
+      <div class="setup-cell"><div class="label">Aileron avant</div><div class="val">${data.reglage.aileronAv}</div></div>
+      <div class="setup-cell"><div class="label">Aileron arrière</div><div class="val">${data.reglage.aileronAr}</div></div>
+      <div class="setup-cell"><div class="label">Moteur</div><div class="val">${data.reglage.moteur}</div></div>
+      <div class="setup-cell"><div class="label">Freins</div><div class="val">${data.reglage.freins}</div></div>
+      <div class="setup-cell"><div class="label">B.V.</div><div class="val">${data.reglage.bv}</div></div>
+      <div class="setup-cell"><div class="label">Suspension</div><div class="val">${data.reglage.suspension}</div></div>
+    </div>`;
+
+  const wearHTML = (data.niveaux || data.usureDepart || data.usureArrivee) ? `
+    <div class="preview-title" style="margin-top:16px;">🔧 Niveaux & usure des pièces</div>
+    <table class="wear-table">
+      <thead><tr><th></th>${PIECES.map(p => `<th>${p}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${data.niveaux ? `<tr><td><strong>Niveau</strong></td>${data.niveaux.map(v => `<td>${v}</td>`).join('')}</tr>` : ''}
+        ${data.usureDepart ? `<tr><td><strong>Usure départ</strong></td>${data.usureDepart.map(v => `<td>${v}%</td>`).join('')}</tr>` : ''}
+        ${data.usureArrivee ? `<tr><td><strong>Usure arrivée</strong></td>${data.usureArrivee.map(v => `<td>${v}%</td>`).join('')}</tr>` : ''}
+      </tbody>
+    </table>` : '';
+
+  document.getElementById('extractedData').innerHTML = pitHTML + relaisHTML + setupHTML + wearHTML;
   document.getElementById('preview').classList.add('visible');
 }
 
@@ -579,6 +677,26 @@ function buildRow() {
     const s = d.stints[i];
     row.push(s ? s.pneu : '', s ? s.avgTemp : '', s ? s.avgHum : '', s ? s.meteo : '');
   }
+  // Risques utilisés : Dépassement, Défense, Sec et dégagé, Mouillé, Disfonctionnement
+  row.push(d.risques.depassement, d.risques.defense, d.risques.secDegage, d.risques.mouille, d.risques.disfonctionnement);
+  // Énergie du pilote
+  row.push(d.energiePilote);
+  // Réglage utilisé : Aileron avant, Aileron arrière, Moteur, Freins, B.V., Suspension
+  row.push(d.reglage.aileronAv, d.reglage.aileronAr, d.reglage.moteur, d.reglage.freins, d.reglage.bv, d.reglage.suspension);
+  // Niveau des pièces (11 valeurs)
+  for (let i = 0; i < 11; i++) row.push(d.niveaux ? (d.niveaux[i] || '') : '');
+  // Usure des pièces au départ (11 valeurs)
+  for (let i = 0; i < 11; i++) row.push(d.usureDepart ? (d.usureDepart[i] || '') : '');
+  // Usure des pièces à l'arrivée (11 valeurs)
+  for (let i = 0; i < 11; i++) row.push(d.usureArrivee ? (d.usureArrivee[i] || '') : '');
+  // Carburant au départ / à la fin
+  row.push(d.carburantDepart || '', d.carburantFin || '');
+  // Raison arrêt aux stands (7 arrêts)
+  for (let i = 0; i < 7; i++) { const p = d.pits[i]; row.push(p ? p.raison : ''); }
+  // Carburant restant après chaque arrêt en % (7 arrêts)
+  for (let i = 0; i < 7; i++) { const p = d.pits[i]; row.push(p ? p.carburantRestantPct : ''); }
+  // Carburant après chaque arrêt en litres (7 arrêts)
+  for (let i = 0; i < 7; i++) { const p = d.pits[i]; row.push(p ? p.carburantApresLitres : ''); }
   return row;
 }
 
@@ -622,9 +740,20 @@ function copyToClipboard() {
 function downloadCSV() {
   const row = buildRow();
   if (!row) { alert('Sélectionne un circuit et importe une analyse d\'abord.'); return; }
+  const pieceLabels = ['Chassis','Moteur','Aileron Avant','Aileron Arrière','Fond Plat','Pontons Latéraux','Refroidissement','B.V.','Freins','Suspension','électronique'];
   const headers = ['Timestamp','DRAPEAU','PAYS','CIRCUIT','Longueur tour','Force appui','Dépassement','Rigidité susp.','Conso carburant','Usure pneus','Grip',
     'Arrêt1 tour','Arrêt1 pneus%','Arrêt2 tour','Arrêt2 pneus%','Arrêt3 tour','Arrêt3 pneus%','Arrêt4 tour','Arrêt4 pneus%','Arrêt5 tour','Arrêt5 pneus%','Pneus fin%',
-    'R1 pneu','R1 temp','R1 hum','R1 météo','R2 pneu','R2 temp','R2 hum','R2 météo','R3 pneu','R3 temp','R3 hum','R3 météo','R4 pneu','R4 temp','R4 hum','R4 météo','R5 pneu','R5 temp','R5 hum','R5 météo','R6 pneu','R6 temp','R6 hum','R6 météo'];
+    'R1 pneu','R1 temp','R1 hum','R1 météo','R2 pneu','R2 temp','R2 hum','R2 météo','R3 pneu','R3 temp','R3 hum','R3 météo','R4 pneu','R4 temp','R4 hum','R4 météo','R5 pneu','R5 temp','R5 hum','R5 météo','R6 pneu','R6 temp','R6 hum','R6 météo',
+    'Risque Dépassement','Risque Défense','Risque Sec et dégagé','Risque Mouillé','Risque Disfonctionnement',
+    'Énergie du pilote',
+    'Réglage Aileron avant','Réglage Aileron arrière','Réglage Moteur','Réglage Freins','Réglage B.V.','Réglage Suspension',
+    ...pieceLabels.map(p => `Niveau ${p}`),
+    ...pieceLabels.map(p => `Usure ${p} (départ)`),
+    ...pieceLabels.map(p => `Usure ${p} (arrivée)`),
+    'Carburant départ (L)','Carburant fin (L)',
+    'Raison arrêt 1','Raison arrêt 2','Raison arrêt 3','Raison arrêt 4','Raison arrêt 5','Raison arrêt 6','Raison arrêt 7',
+    'Arrêt1 carburant%','Arrêt2 carburant%','Arrêt3 carburant%','Arrêt4 carburant%','Arrêt5 carburant%','Arrêt6 carburant%','Arrêt7 carburant%',
+    'Carburant après arrêt1 (L)','Carburant après arrêt2 (L)','Carburant après arrêt3 (L)','Carburant après arrêt4 (L)','Carburant après arrêt5 (L)','Carburant après arrêt6 (L)','Carburant après arrêt7 (L)'];
   const csv = [headers, row].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
@@ -659,7 +788,7 @@ function doPost(e) {
   }
 }
 
-// ── En-têtes à mettre en ligne 1 de ton Google Sheets ──
+// ── En-têtes à mettre en ligne 1 de ton Google Sheets (114 colonnes, A → DJ) ──
 // A  : Timestamp
 // B  : DRAPEAU
 // C  : PAYS
@@ -705,7 +834,75 @@ function doPost(e) {
 // AQ : Relais 6 – Pneu
 // AR : Relais 6 – Temp. moy.
 // AS : Relais 6 – Humidité moy.
-// AT : Relais 6 – Météo`;
+// AT : Relais 6 – Météo
+// AU : Dépassement (risque utilisé)
+// AV : Défense
+// AW : Sec et dégagé
+// AX : Mouillé
+// AY : Disfonctionnement
+// AZ : Énergie du pilote
+// BA : Aileron avant (réglage)
+// BB : Aileron arrière (réglage)
+// BC : Moteur (réglage)
+// BD : Freins (réglage)
+// BE : B.V. (réglage)
+// BF : Suspension (réglage)
+// BG : Niveau Chassis
+// BH : Niveau Moteur
+// BI : Niveau Aileron Avant
+// BJ : Niveau Aileron Arrière
+// BK : Niveau Fond Plat
+// BL : Niveau Pontons Latéraux
+// BM : Niveau Refroidissement
+// BN : Niveau B.V.
+// BO : Niveau Freins
+// BP : Niveau Suspension
+// BQ : Niveau électronique
+// BR : Usure Chassis (départ)
+// BS : Usure Moteur (départ)
+// BT : Usure Aileron Avant (départ)
+// BU : Usure Aileron Arrière (départ)
+// BV : Usure Fond Plat (départ)
+// BW : Usure Pontons Latéraux (départ)
+// BX : Usure Refroidissement (départ)
+// BY : Usure B.V. (départ)
+// BZ : Usure Freins (départ)
+// CA : Usure Suspension (départ)
+// CB : Usure électronique (départ)
+// CC : Usure Chassis (arrivée)
+// CD : Usure Moteur (arrivée)
+// CE : Usure Aileron Avant (arrivée)
+// CF : Usure Aileron Arrière (arrivée)
+// CG : Usure Fond Plat (arrivée)
+// CH : Usure Pontons Latéraux (arrivée)
+// CI : Usure Refroidissement (arrivée)
+// CJ : Usure B.V. (arrivée)
+// CK : Usure Freins (arrivée)
+// CL : Usure Suspension (arrivée)
+// CM : Usure électronique (arrivée)
+// CN : Carburant au départ (litres)
+// CO : Carburant à la fin de la course (litres)
+// CP : Raison arrêt aux stands (arrêt 1)
+// CQ : Raison arrêt aux stands (arrêt 2)
+// CR : Raison arrêt aux stands (arrêt 3)
+// CS : Raison arrêt aux stands (arrêt 4)
+// CT : Raison arrêt aux stands (arrêt 5)
+// CU : Raison arrêt aux stands (arrêt 6)
+// CV : Raison arrêt aux stands (arrêt 7)
+// CW : Arrêt 1 - Carburant restant (%)
+// CX : Arrêt 2 - Carburant restant (%)
+// CY : Arrêt 3 - Carburant restant (%)
+// CZ : Arrêt 4 - Carburant restant (%)
+// DA : Arrêt 5 - Carburant restant (%)
+// DB : Arrêt 6 - Carburant restant (%)
+// DC : Arrêt 7 - Carburant restant (%)
+// DD : Carburant après arrêt 1 (litres)
+// DE : Carburant après arrêt 2 (litres)
+// DF : Carburant après arrêt 3 (litres)
+// DG : Carburant après arrêt 4 (litres)
+// DH : Carburant après arrêt 5 (litres)
+// DI : Carburant après arrêt 6 (litres)
+// DJ : Carburant après arrêt 7 (litres)`;
 }
 
 function switchTab(name) {
